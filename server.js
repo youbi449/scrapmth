@@ -15,7 +15,7 @@ const MAX_DELAY_BETWEEN_VISITS = 3000; // 3 secondes maximum entre chaque visite
 puppeteer_extra.use(StealthPlugin());
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 6000;
 
 // Middleware pour parser le corps des requêtes
 app.use(bodyParser.urlencoded({ extended: true }));
