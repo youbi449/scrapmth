@@ -11,6 +11,71 @@ const MAX_INFONET_VISITS_PER_MINUTE = 2;
 const MIN_DELAY_BETWEEN_VISITS = 500; // 0.5 seconde minimum entre chaque visite
 const MAX_DELAY_BETWEEN_VISITS = 3000; // 3 secondes maximum entre chaque visite
 
+// Configuration Puppeteer avec fallbacks
+const launchPuppeteer = async () => {
+  console.log('Tentative de lancement de Puppeteer...');
+  
+  // Options de base pour Puppeteer
+  const defaultOptions = {
+    headless: 'new',
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-web-security',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--disable-site-isolation-trials',
+      '--disable-features=BlockInsecurePrivateNetworkRequests',
+      '--disable-blink-features=AutomationControlled'
+    ]
+  };
+  
+  // Si on est sur Windows, essayons de trouver Chrome à l'emplacement standard
+  const isWindows = process.platform === 'win32';
+  if (isWindows) {
+    const possiblePaths = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe'
+    ];
+    
+    for (const path of possiblePaths) {
+      try {
+        if (require('fs').existsSync(path)) {
+          console.log(`Chrome trouvé à l'emplacement: ${path}`);
+          defaultOptions.executablePath = path;
+          break;
+        }
+      } catch (e) {
+        console.error(`Erreur lors de la vérification de l'existence de Chrome:`, e);
+      }
+    }
+  }
+  
+  // Tentative avec les options par défaut
+  try {
+    console.log('Lancement de Puppeteer avec les options:', JSON.stringify(defaultOptions));
+    return await puppeteer_extra.launch(defaultOptions);
+  } catch (error) {
+    console.error('Erreur lors du lancement de Puppeteer:', error.message);
+    
+    // Tentative de repli sur Puppeteer standard (sans plugin)
+    try {
+      console.log('Tentative avec Puppeteer standard (sans plugin)...');
+      return await puppeteer.launch(defaultOptions);
+    } catch (error2) {
+      console.error('Échec également avec Puppeteer standard:', error2.message);
+      
+      // Tentative avec option sans navigateur
+      if (isWindows) {
+        throw new Error(`Échec du lancement du navigateur: ${error.message}. Veuillez vérifier que Chrome est bien installé sur votre système.`);
+      } else {
+        throw new Error(`Échec du lancement du navigateur: ${error.message}. Veuillez installer les dépendances requises avec la commande : 
+        apt-get update && apt-get install -y libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxi6 libxtst6 libnss3 libcups2 libxss1 libxrandr2 libasound2 libatk1.0-0 libatk-bridge2.0-0 libpangocairo-1.0-0 libgtk-3-0 libgbm1`);
+      }
+    }
+  }
+};
+
 // Appliquer le plugin stealth pour contourner les détections
 puppeteer_extra.use(StealthPlugin());
 
@@ -89,18 +154,13 @@ async function scrapeAllPages(baseUrl) {
   console.log(`Début du scraping de ${MAX_PAGES} pages maximum à partir de ${baseUrl}`);
   
   // Lancer le navigateur une seule fois pour toutes les pages
-  const browser = await puppeteer_extra.launch({
-    headless: 'new',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-web-security',
-      '--disable-features=IsolateOrigins,site-per-process',
-      '--disable-site-isolation-trials',
-      '--disable-features=BlockInsecurePrivateNetworkRequests',
-      '--disable-blink-features=AutomationControlled'
-    ]
-  });
+  let browser;
+  try {
+    browser = await launchPuppeteer();
+  } catch (error) {
+    console.error('Erreur fatale lors du lancement du navigateur:', error.message);
+    throw error;
+  }
   
   try {
     const page = await browser.newPage();
